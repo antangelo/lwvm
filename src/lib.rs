@@ -1,3 +1,6 @@
+pub mod ir;
+pub mod block;
+
 #[cfg(test)]
 mod tests {
     #[test]
