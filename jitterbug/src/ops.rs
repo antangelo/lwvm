@@ -1,4 +1,4 @@
-use crate::types::{LValue, RValue, IntImmed, IntType, Comparator, BlockLabel};
+use crate::types::{BlockLabel, Comparator, IntImmed, IntType, LValue, RValue};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Operation {
@@ -22,13 +22,14 @@ pub(crate) enum Operation {
     HostReadMem(LValue, RValue<IntImmed>),
     HostWriteMem(RValue<IntImmed>, RValue<IntImmed>),
     //FnCall(RValue<IntImmed>, Vec<RValue<IntImmed>>),
-
-    GuestReadMem(LValue, RValue<IntImmed>),
-    GuestWriteMem(RValue<IntImmed>, RValue<IntImmed>),
+    GuestReadMem(LValue, RValue<IntImmed>, u8),
+    GuestWriteMem(RValue<IntImmed>, RValue<IntImmed>, u8),
 
     ICmp(LValue, Comparator, RValue<IntImmed>, RValue<IntImmed>),
     Select(RValue<IntImmed>, LValue, RValue<IntImmed>, RValue<IntImmed>),
 
     Branch(RValue<IntImmed>, BlockLabel, BlockLabel),
     Exit(u8),
+
+    Instruction(),
 }

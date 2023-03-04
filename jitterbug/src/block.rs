@@ -1,8 +1,20 @@
-use crate::types::{BlockLabel, Comparator, IntImmed, IntType, LValue, RValue};
 use crate::ops::Operation;
+use crate::types::{BlockLabel, Comparator, IntImmed, IntType, LValue, RValue};
 
-trait InstructionStream {
+pub(crate) trait InstructionStream {
     fn to_vec(&self) -> &Vec<Operation>;
+
+    fn validate(&self) -> bool {
+        if let Some(op) = self.to_vec().last() {
+            match op {
+                Operation::Branch(_, _, _) => true,
+                Operation::Exit(_) => true,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -42,6 +54,23 @@ macro_rules! op_lv1_rv1 {
     };
 }
 
+macro_rules! op_lv1_rv1_u8 {
+    ($name:ident, $op:ident) => {
+        pub fn $name(
+            &mut self,
+            dest: (impl Into<LValue> + Clone),
+            arg1: (impl Into<RValue<IntImmed>> + Clone),
+            arg2: u8,
+        ) {
+            self.ops.push(Operation::$op(
+                Into::<LValue>::into(dest),
+                Into::<RValue<IntImmed>>::into(arg1),
+                arg2,
+            ));
+        }
+    };
+}
+
 macro_rules! op_lv1_rv1_ty {
     ($name:ident, $op:ident) => {
         pub fn $name(
@@ -76,16 +105,18 @@ macro_rules! op_lv1_rv2 {
     };
 }
 
-macro_rules! op_lv0_rv2 {
+macro_rules! op_lv0_rv2_u8 {
     ($name:ident, $op:ident) => {
         pub fn $name(
             &mut self,
             arg1: (impl Into<RValue<IntImmed>> + Clone),
             arg2: (impl Into<RValue<IntImmed>> + Clone),
+            arg3: u8,
         ) {
             self.ops.push(Operation::$op(
                 Into::<RValue<IntImmed>>::into(arg1),
                 Into::<RValue<IntImmed>>::into(arg2),
+                arg3,
             ));
         }
     };
@@ -130,8 +161,8 @@ macro_rules! define_safe_ops {
         op_lv1_rv2!(xor, Xor);
         op_lv1_rv1!(not, Not);
 
-        op_lv1_rv1!(guest_mem_read, GuestReadMem);
-        op_lv0_rv2!(guest_mem_write, GuestWriteMem);
+        op_lv1_rv1_u8!(guest_mem_read, GuestReadMem);
+        op_lv0_rv2_u8!(guest_mem_write, GuestWriteMem);
 
         pub fn int_cmp(
             &mut self,

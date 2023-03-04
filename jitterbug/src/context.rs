@@ -1,52 +1,75 @@
-#[derive(Debug, Clone, Copy)]
-struct RegisterMapping {
-    offset: usize,
+use crate::{
+    backend::{Compiler, Executable, PlatformDefaultBackend},
+    reg::RegisterMap,
+    unit::TranslationUnit,
+};
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
+
+#[derive(Default)]
+pub struct ExecutionContext<
+    RegType,
+    State: RegisterMap<RegType>,
+    Backend: Compiler<RegType, State> = PlatformDefaultBackend,
+> {
+    backend: RefCell<Backend>,
+
+    phantom_reg_type: core::marker::PhantomData<RegType>,
+    phantom_state: core::marker::PhantomData<State>,
 }
 
-pub struct Context<StateType> {
-    reg_map: [Option<RegisterMapping>; 256],
+impl<RegType, State: RegisterMap<RegType>, Backend: Compiler<RegType, State>>
+    ExecutionContext<RegType, State, Backend>
+{
+    pub fn compile(
+        &self,
+        translation_unit: Box<TranslationUnit>,
+    ) -> Result<CompiledTranslationUnit<RegType, State, Backend>, String> {
+        let exec = self.compile_unit(&translation_unit)?;
 
-    phantom: core::marker::PhantomData<StateType>,
-}
+        Ok(CompiledTranslationUnit {
+            context: self,
+            translation_unit,
+            executable: Rc::downgrade(&exec),
+        })
+    }
 
-impl<T> Default for Context<T> {
-    fn default() -> Self {
-        Self {
-            reg_map: [None; 256],
-
-            phantom: core::marker::PhantomData,
-        }
+    fn compile_unit(
+        &self,
+        unit: &Box<TranslationUnit>,
+    ) -> Result<Rc<dyn Executable<RegType, State>>, String> {
+        self.backend.borrow_mut().compile_unit(unit)
     }
 }
 
-impl<T> Context<T> {
-    pub fn map_register(&mut self, register: u8, offset: usize) {
-        if offset >= core::mem::size_of::<T>() {
-            panic!("Offset {} is greater than size of state type", offset);
-        }
-
-        self.reg_map[register as usize] = Some(RegisterMapping { offset });
-    }
-
-    pub fn new_unit<'ctx>(&'ctx mut self) -> TranslationUnit<'ctx, T> {
-        TranslationUnit::new(self)
-    }
+pub struct CompiledTranslationUnit<
+    'ctx,
+    RegType,
+    State: RegisterMap<RegType>,
+    Backend: Compiler<RegType, State>,
+> {
+    context: &'ctx ExecutionContext<RegType, State, Backend>,
+    translation_unit: Box<TranslationUnit>,
+    executable: Weak<dyn Executable<RegType, State>>,
 }
 
-pub(crate) struct CompiledUnitHandle<StateType> {
-    state: StateType,
-}
+impl<'ctx, RegType, State: RegisterMap<RegType>, Backend: Compiler<RegType, State>>
+    CompiledTranslationUnit<'ctx, RegType, State, Backend>
+{
+    pub unsafe fn execute(&mut self, state: &mut State) {
+        if let Some(exec) = self.executable.upgrade() {
+            unsafe {
+                exec.execute(state);
+            }
+        } else {
+            let exec = self.context.compile_unit(&self.translation_unit).unwrap();
+            self.executable = Rc::downgrade(&exec);
 
-pub struct TranslationUnit<'ctx, StateType> {
-    context: &'ctx Context<StateType>,
-    compiled: Option<CompiledUnitHandle<StateType>>,
-}
-
-impl<'ctx, T> TranslationUnit<'ctx, T> {
-    fn new(context: &'ctx mut Context<T>) -> Self {
-        Self {
-            context,
-            compiled: None,
+            unsafe {
+                exec.execute(state);
+            }
         }
     }
 }
