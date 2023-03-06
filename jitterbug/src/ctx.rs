@@ -9,15 +9,13 @@ use std::{
 };
 
 #[derive(Default)]
-pub struct ExecutionContext<State: RegisterMap, Backend: Compiler<State> = PlatformDefaultBackend> {
+pub struct ExecutionContext<Backend: Compiler = PlatformDefaultBackend> {
     backend: RefCell<Backend>,
-
-    phantom_state: core::marker::PhantomData<State>,
 }
 
-impl<State: RegisterMap, Backend: Compiler<State>> ExecutionContext<State, Backend> {
-    pub fn compile(
-        &self,
+impl<Backend: Compiler> ExecutionContext<Backend> {
+    pub fn compile<'ctx, 'state: 'ctx, State: RegisterMap + 'state>(
+        &'ctx self,
         translation_unit: Box<TranslationUnit>,
     ) -> Result<CompiledTranslationUnit<State, Backend>, String> {
         let exec = self.compile_unit(&translation_unit)?;
@@ -29,23 +27,21 @@ impl<State: RegisterMap, Backend: Compiler<State>> ExecutionContext<State, Backe
         })
     }
 
-    fn compile_unit(
+    fn compile_unit<'state, State: RegisterMap + 'state>(
         &self,
         unit: &Box<TranslationUnit>,
-    ) -> Result<Rc<dyn Executable<State>>, String> {
+    ) -> Result<Rc<dyn Executable<State> + 'state>, String> {
         self.backend.borrow_mut().compile_unit(unit)
     }
 }
 
-pub struct CompiledTranslationUnit<'ctx, State: RegisterMap, Backend: Compiler<State>> {
-    context: &'ctx ExecutionContext<State, Backend>,
+pub struct CompiledTranslationUnit<'ctx, 'state, State: RegisterMap, Backend: Compiler> {
+    context: &'ctx ExecutionContext<Backend>,
     translation_unit: Box<TranslationUnit>,
-    executable: Weak<dyn Executable<State>>,
+    executable: Weak<dyn Executable<State> + 'state>,
 }
 
-impl<'ctx, State: RegisterMap, Backend: Compiler<State>>
-    CompiledTranslationUnit<'ctx, State, Backend>
-{
+impl<'ctx, 'state, State: RegisterMap + 'state, Backend: Compiler> CompiledTranslationUnit<'ctx, 'state, State, Backend> {
     pub unsafe fn execute(&mut self, state: &mut State) {
         if let Some(exec) = self.executable.upgrade() {
             unsafe {

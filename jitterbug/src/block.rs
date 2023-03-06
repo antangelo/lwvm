@@ -17,9 +17,9 @@ pub(crate) trait InstructionStream {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BasicBlock {
-    ops: Vec<Operation>,
+    pub(crate) ops: Vec<Operation>,
 }
 
 #[derive(Debug)]
@@ -29,7 +29,9 @@ pub struct BasicBlockBuilder {
 
 impl BasicBlock {
     pub fn builder() -> BasicBlockBuilder {
-        BasicBlockBuilder { ops: Vec::default() }
+        BasicBlockBuilder {
+            ops: Vec::default(),
+        }
     }
 }
 

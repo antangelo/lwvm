@@ -1,3 +1,5 @@
+use crate::IntImmed;
+
 pub enum RegisterType {
     I8,
     I16,
@@ -44,15 +46,33 @@ unsafe impl AsRegister for u64 {
 }
 
 pub trait RegisterMap {
-    fn register_offset(&self, reg: u8) -> Option<(usize, RegisterType)>;
+    fn register_offsets() -> Vec<Register>;
 }
 
 impl<T: AsRegister, const N: usize> RegisterMap for [T; N] {
-    fn register_offset(&self, reg: u8) -> Option<(usize, RegisterType)> {
-        if self.len() >= reg.into() {
-            return None;
-        }
+    fn register_offsets() -> Vec<Register> {
+        (0..N).map(|i| {
+            Register {
+                offset: core::mem::size_of::<T>() * i,
+                ty: T::to_reg_type(),
+            }
+        }).collect()
+    }
+}
 
-        Some((core::mem::size_of::<T>() * (reg as usize), T::to_reg_type()))
+pub struct Register {
+    pub(crate) offset: usize,
+    pub(crate) ty: RegisterType,
+}
+
+impl Register {
+    pub(crate) unsafe fn read<State: RegisterMap>(&self, state: &State) -> IntImmed {
+        let state = (state as *const State as *const u8).add(self.offset);
+        match self.ty {
+            RegisterType::I8 => IntImmed::I8(*state),
+            RegisterType::I16 => IntImmed::I16(*(state as *const u16)),
+            RegisterType::I32 => IntImmed::I32(*(state as *const u32)),
+            RegisterType::I64 => IntImmed::I64(*(state as *const u64)),
+        }
     }
 }

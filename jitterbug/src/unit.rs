@@ -2,10 +2,11 @@ use crate::block::{BasicBlock, InstructionStream};
 use crate::ir::types::BlockLabel;
 use std::collections::BTreeMap;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct TranslationUnit {
-    blocks: BTreeMap<BlockLabel, BasicBlock>,
-    entrypoint: Option<BlockLabel>,
+    pub(crate) labels: BTreeMap<BlockLabel, usize>,
+    pub(crate) blocks: Vec<BasicBlock>,
+    pub(crate) entrypoint: Option<usize>,
 }
 
 impl TranslationUnit {
@@ -16,17 +17,15 @@ impl TranslationUnit {
             ));
         }
 
-        self.blocks.insert(label, block);
+        self.labels.insert(label, self.blocks.len());
+        self.blocks.push(block);
 
         Ok(())
     }
 
     pub fn set_entry(&mut self, label: BlockLabel) -> Result<(), String> {
-        if !self.blocks.contains_key(&label) {
-            return Err(format!("No such block {} to make entrypiont", label));
-        }
-
-        self.entrypoint = Some(label);
+        let entry_idx = self.labels.get(&label).ok_or(format!("No such block {} to make entrypiont", label))?;
+        self.entrypoint = Some(*entry_idx);
 
         Ok(())
     }

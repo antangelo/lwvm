@@ -1,9 +1,11 @@
 use crate::{ir::reg::RegisterMap, unit::TranslationUnit};
 use std::rc::Rc;
 
-pub trait Compiler<State: RegisterMap> {
-    fn compile_unit(&mut self, unit: &TranslationUnit)
-        -> Result<Rc<dyn Executable<State>>, String>;
+pub trait Compiler {
+    fn compile_unit<'a, State: RegisterMap + 'a>(
+        &mut self,
+        unit: &TranslationUnit,
+    ) -> Result<Rc<dyn Executable<State> + 'a>, String>;
 }
 
 pub trait Executable<State: RegisterMap> {
@@ -13,11 +15,11 @@ pub trait Executable<State: RegisterMap> {
 #[derive(Default)]
 pub struct PlatformDefaultBackend {}
 
-impl<State: RegisterMap> Compiler<State> for PlatformDefaultBackend {
-    fn compile_unit(
+impl Compiler for PlatformDefaultBackend {
+    fn compile_unit<'a, State: RegisterMap + 'a>(
         &mut self,
         unit: &TranslationUnit,
-    ) -> Result<Rc<dyn Executable<State>>, String> {
+    ) -> Result<Rc<dyn Executable<State> + 'a>, String> {
         Err(String::from("No platform backend available"))
     }
 }
