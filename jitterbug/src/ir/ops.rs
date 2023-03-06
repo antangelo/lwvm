@@ -1,4 +1,4 @@
-use crate::types::{BlockLabel, Comparator, IntImmed, IntType, LValue, RValue};
+use crate::ir::types::{BlockLabel, Comparator, IntImmed, IntType, LValue, RValue};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Operation {

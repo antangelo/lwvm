@@ -1,6 +1,6 @@
 use crate::{
     backend::{Compiler, Executable, PlatformDefaultBackend},
-    reg::RegisterMap,
+    ir::reg::RegisterMap,
     unit::TranslationUnit,
 };
 use std::{
@@ -9,24 +9,17 @@ use std::{
 };
 
 #[derive(Default)]
-pub struct ExecutionContext<
-    RegType,
-    State: RegisterMap<RegType>,
-    Backend: Compiler<RegType, State> = PlatformDefaultBackend,
-> {
+pub struct ExecutionContext<State: RegisterMap, Backend: Compiler<State> = PlatformDefaultBackend> {
     backend: RefCell<Backend>,
 
-    phantom_reg_type: core::marker::PhantomData<RegType>,
     phantom_state: core::marker::PhantomData<State>,
 }
 
-impl<RegType, State: RegisterMap<RegType>, Backend: Compiler<RegType, State>>
-    ExecutionContext<RegType, State, Backend>
-{
+impl<State: RegisterMap, Backend: Compiler<State>> ExecutionContext<State, Backend> {
     pub fn compile(
         &self,
         translation_unit: Box<TranslationUnit>,
-    ) -> Result<CompiledTranslationUnit<RegType, State, Backend>, String> {
+    ) -> Result<CompiledTranslationUnit<State, Backend>, String> {
         let exec = self.compile_unit(&translation_unit)?;
 
         Ok(CompiledTranslationUnit {
@@ -39,24 +32,19 @@ impl<RegType, State: RegisterMap<RegType>, Backend: Compiler<RegType, State>>
     fn compile_unit(
         &self,
         unit: &Box<TranslationUnit>,
-    ) -> Result<Rc<dyn Executable<RegType, State>>, String> {
+    ) -> Result<Rc<dyn Executable<State>>, String> {
         self.backend.borrow_mut().compile_unit(unit)
     }
 }
 
-pub struct CompiledTranslationUnit<
-    'ctx,
-    RegType,
-    State: RegisterMap<RegType>,
-    Backend: Compiler<RegType, State>,
-> {
-    context: &'ctx ExecutionContext<RegType, State, Backend>,
+pub struct CompiledTranslationUnit<'ctx, State: RegisterMap, Backend: Compiler<State>> {
+    context: &'ctx ExecutionContext<State, Backend>,
     translation_unit: Box<TranslationUnit>,
-    executable: Weak<dyn Executable<RegType, State>>,
+    executable: Weak<dyn Executable<State>>,
 }
 
-impl<'ctx, RegType, State: RegisterMap<RegType>, Backend: Compiler<RegType, State>>
-    CompiledTranslationUnit<'ctx, RegType, State, Backend>
+impl<'ctx, State: RegisterMap, Backend: Compiler<State>>
+    CompiledTranslationUnit<'ctx, State, Backend>
 {
     pub unsafe fn execute(&mut self, state: &mut State) {
         if let Some(exec) = self.executable.upgrade() {
