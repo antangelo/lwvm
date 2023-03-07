@@ -1,14 +1,13 @@
 [package]
-name = "jitterbug"
+name = "lwvm"
 version = "0.0.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
-description = "JIT dynamic recompiler library"
+description = "Lightweight virtual machine and JIT recompiler"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bumpalo = "3.11"
 mmap-rs = "0.4"
 memoffset = "0.8"
