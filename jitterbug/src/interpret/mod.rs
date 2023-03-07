@@ -1,7 +1,12 @@
 use crate::{
     backend::{Compiler, Executable},
-    ir::{reg::{RegisterMap, RegisterType, Register}, types::{BlockLabel, RValue}, ops::Operation},
-    unit::TranslationUnit, IntImmed, LValue,
+    ir::{
+        ops::Operation,
+        reg::{Register, RegisterMap, RegisterType},
+        types::{BlockLabel, RValue, ZippedIntImmed},
+    },
+    unit::TranslationUnit,
+    IntImmed, LValue,
 };
 use std::rc::Rc;
 
@@ -17,84 +22,118 @@ pub struct InterpreterExecutable {
     unit: TranslationUnit,
     regs: Vec<Register>,
 }
+
 impl InterpreterExecutable {
-fn rvalue_to_u64<State: RegisterMap>(&self, state: &State, rv: &RValue<IntImmed>) -> u64 {
-    match rv {
-            RValue::Immediate(i) => {
-                match i {
-                    IntImmed::Bool(b) => *b as u64,
-                    IntImmed::I8(i) => *i as u64,
-                    IntImmed::I16(i) => *i as u64,
-                    IntImmed::I32(i) => *i as u64,
-                    IntImmed::I64(i) => *i as u64,
-                }
-            },
-            RValue::LValue(lv) => {
-                match lv {
-                    LValue::Register(r) => {
-                        unsafe {
-                            let Register {offset, ty} = &self.regs[*r as usize];
-                            let reg = (state as *const State as *const u8).add(*offset);
-                            match ty {
-                                RegisterType::I8 => *reg as u64,
-                                RegisterType::I16 => *(reg as *const u16) as u64,
-                                RegisterType::I32 => *(reg as *const u32) as u64,
-                                RegisterType::I64 => *(reg as *const u64),
-                            }
-                        }
-                    },
-                    LValue::Scratch(_) => unimplemented!(),
-                }
+    fn rv_to_immed<State: RegisterMap>(&self, state: &State, rv: &RValue<IntImmed>) -> IntImmed {
+        match rv {
+            RValue::Immediate(i) => *i,
+            RValue::LValue(lv) => match lv {
+                LValue::Register(r) => unsafe { self.regs[*r as usize].read(state) },
+                LValue::Scratch(_) => unimplemented!(),
             },
         }
-}
+    }
 
-    fn op_add<State: RegisterMap>(&self, dest: &LValue, arg1: &RValue<IntImmed>, arg2: &RValue<IntImmed>, signed: bool, state: &mut State) {
-        let arg1 = self.rvalue_to_u64(state, arg1);
-        let arg2 = self.rvalue_to_u64(state, arg2);
+    fn op_add<State: RegisterMap>(
+        &self,
+        dest: &LValue,
+        arg1: &RValue<IntImmed>,
+        arg2: &RValue<IntImmed>,
+        signed: bool,
+        state: &mut State,
+    ) {
+        let arg1 = self.rv_to_immed(state, arg1);
+        let arg2 = self.rv_to_immed(state, arg2);
+        let args = IntImmed::upcast_zip(&arg1, &arg2, signed);
+        let value = match args {
+            ZippedIntImmed::Bool(v1, v2) => IntImmed::I8(if v1 && v2 { 2 } else if v1 || v2 { 1 } else { 0 }),
+            ZippedIntImmed::I8(v1, v2) => IntImmed::I8(v1.wrapping_add(v2)),
+            ZippedIntImmed::I16(v1, v2) => IntImmed::I16(v1.wrapping_add(v2)),
+            ZippedIntImmed::I32(v1, v2) => IntImmed::I32(v1.wrapping_add(v2)),
+            ZippedIntImmed::I64(v1, v2) => IntImmed::I64(v1.wrapping_add(v2)),
+        };
 
         let value = if signed {
-            (arg1 as i64).wrapping_add(arg2 as i64) as u64
+            value.to_i64() as u64
         } else {
-            arg1 + arg2
+            value.to_u64()
         };
 
         match dest {
-            LValue::Register(r) => {
-                unsafe {
-                    let Register { offset, ty } = &self.regs[*r as usize];
-                    let reg = (state as *mut State as *mut u8).add(*offset);
-                    match ty {
-                        RegisterType::I8 => *reg = value as u8,
-                        RegisterType::I16 => *(reg as *mut u16) = value as u16,
-                        RegisterType::I32 => *(reg as *mut u32) = value as u32,
-                        RegisterType::I64 => *(reg as *mut u64) = value,
-                    }
-                }
+            LValue::Register(r) => unsafe {
+                self.regs[*r as usize].write(value, state);
             },
             LValue::Scratch(_) => unimplemented!(),
         }
     }
 
-    fn op_branch<State: RegisterMap>(&self, cond: &RValue<IntImmed>, taken: &BlockLabel, not_taken: &BlockLabel, state: &mut State) -> ExitAction {
-        let value = self.rvalue_to_u64(state, cond);
-        let branch_sel = if value == 0 {
-            not_taken
-        } else { taken };
+    fn op_sub<State: RegisterMap>(
+        &self,
+        dest: &LValue,
+        arg1: &RValue<IntImmed>,
+        arg2: &RValue<IntImmed>,
+        signed: bool,
+        state: &mut State,
+    ) {
+        let arg1 = self.rv_to_immed(state, arg1);
+        let arg2 = self.rv_to_immed(state, arg2);
+        let args = IntImmed::upcast_zip(&arg1, &arg2, signed);
+        let value = match args {
+            ZippedIntImmed::Bool(v1, v2) => IntImmed::I8(if v1 == v2 { 0 } else if v1 { 1 } else { 0xff }),
+            ZippedIntImmed::I8(v1, v2) => IntImmed::I8(v1.wrapping_sub(v2)),
+            ZippedIntImmed::I16(v1, v2) => IntImmed::I16(v1.wrapping_sub(v2)),
+            ZippedIntImmed::I32(v1, v2) => IntImmed::I32(v1.wrapping_sub(v2)),
+            ZippedIntImmed::I64(v1, v2) => IntImmed::I64(v1.wrapping_sub(v2)),
+        };
+
+        let value = if signed {
+            value.to_i64() as u64
+        } else {
+            value.to_u64()
+        };
+
+        match dest {
+            LValue::Register(r) => unsafe {
+                self.regs[*r as usize].write(value, state);
+            },
+            LValue::Scratch(_) => unimplemented!(),
+        }
+    }
+
+    fn op_branch<State: RegisterMap>(
+        &self,
+        cond: &RValue<IntImmed>,
+        taken: &BlockLabel,
+        not_taken: &BlockLabel,
+        state: &mut State,
+    ) -> ExitAction {
+        let value = self.rv_to_immed(state, cond).to_u64();
+        let branch_sel = if value == 0 { not_taken } else { taken };
 
         let idx = self.unit.labels.get(branch_sel).unwrap();
         ExitAction::BranchTo(*idx)
     }
 
-    fn execute_block<State: RegisterMap>(&self, ops: &Vec<Operation>, state: &mut State) -> ExitAction {
+    fn execute_block<State: RegisterMap>(
+        &self,
+        ops: &Vec<Operation>,
+        state: &mut State,
+    ) -> ExitAction {
         for op in ops {
             match op {
-                Operation::Add(dest, arg1, arg2, signed) => self.op_add(dest, arg1, arg2, *signed, state),
+                Operation::Add(dest, arg1, arg2, signed) => {
+                    self.op_add(dest, arg1, arg2, *signed, state)
+                },
+                Operation::Sub(dest, arg1, arg2, signed) => {
+                    self.op_sub(dest, arg1, arg2, *signed, state)
+                }
                 Operation::Exit(code) => return ExitAction::Exit(*code),
-                Operation::Branch(cond, taken, not_taken) => return self.op_branch(cond, taken, not_taken, state),
+                Operation::Branch(cond, taken, not_taken) => {
+                    return self.op_branch(cond, taken, not_taken, state)
+                }
                 o => panic!("Unimplemented operation {:?}", o),
             }
-        };
+        }
 
         panic!("Non-terminating block");
     }
@@ -108,7 +147,6 @@ impl Compiler for InterpreterBackend {
         Ok(Rc::new(InterpreterExecutable {
             unit: unit.clone(),
             regs: State::register_offsets(),
-
         }))
     }
 }

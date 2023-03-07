@@ -19,8 +19,8 @@ mod tests {
         let mut block = super::block::BasicBlock::builder();
         block.add(
             LValue::Register(0),
-            IntImmed::I16(3),
-            IntImmed::I16(4),
+            IntImmed::I16(-3 as i16 as u16),
+            IntImmed::I16(-4 as i16 as u16),
             true,
         );
 
@@ -30,7 +30,8 @@ mod tests {
         unit.add_basic_block(String::from("main"), block).unwrap();
         unit.set_entry(String::from("main")).unwrap();
 
-        let ctx: ExecutionContext<super::interpret::InterpreterBackend> = ExecutionContext::default();
+        let ctx: ExecutionContext<super::interpret::InterpreterBackend> =
+            ExecutionContext::default();
         let mut tb = ctx.compile(Box::new(unit)).unwrap();
 
         let mut state = [0u64; 10];
@@ -39,6 +40,6 @@ mod tests {
             tb.execute(&mut state);
         }
 
-        assert_eq!(state[0], 7);
+        assert_eq!(state[0], -7 as i16 as u64);
     }
 }

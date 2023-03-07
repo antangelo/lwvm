@@ -51,12 +51,12 @@ pub trait RegisterMap {
 
 impl<T: AsRegister, const N: usize> RegisterMap for [T; N] {
     fn register_offsets() -> Vec<Register> {
-        (0..N).map(|i| {
-            Register {
+        (0..N)
+            .map(|i| Register {
                 offset: core::mem::size_of::<T>() * i,
                 ty: T::to_reg_type(),
-            }
-        }).collect()
+            })
+            .collect()
     }
 }
 
@@ -73,6 +73,26 @@ impl Register {
             RegisterType::I16 => IntImmed::I16(*(state as *const u16)),
             RegisterType::I32 => IntImmed::I32(*(state as *const u32)),
             RegisterType::I64 => IntImmed::I64(*(state as *const u64)),
+        }
+    }
+
+    pub(crate) fn trunc_to_type(&self, immed: IntImmed) -> IntImmed {
+        let value = immed.to_u64();
+        match self.ty {
+            RegisterType::I8 => IntImmed::I8(value as u8),
+            RegisterType::I16 => IntImmed::I16(value as u16),
+            RegisterType::I32 => IntImmed::I32(value as u32),
+            RegisterType::I64 => IntImmed::I64(value as u64),
+        }
+    }
+
+    pub(crate) unsafe fn write<State: RegisterMap>(&self, value: u64, state: &mut State) {
+        let reg = (state as *mut State as *mut u8).add(self.offset);
+        match self.ty {
+            RegisterType::I8 => *reg = value as u8,
+            RegisterType::I16 => *(reg as *mut u16) = value as u16,
+            RegisterType::I32 => *(reg as *mut u32) = value as u32,
+            RegisterType::I64 => *(reg as *mut u64) = value,
         }
     }
 }

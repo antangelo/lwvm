@@ -24,7 +24,10 @@ impl TranslationUnit {
     }
 
     pub fn set_entry(&mut self, label: BlockLabel) -> Result<(), String> {
-        let entry_idx = self.labels.get(&label).ok_or(format!("No such block {} to make entrypiont", label))?;
+        let entry_idx = self
+            .labels
+            .get(&label)
+            .ok_or(format!("No such block {} to make entrypiont", label))?;
         self.entrypoint = Some(*entry_idx);
 
         Ok(())

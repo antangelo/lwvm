@@ -41,7 +41,9 @@ pub struct CompiledTranslationUnit<'ctx, 'state, State: RegisterMap, Backend: Co
     executable: Weak<dyn Executable<State> + 'state>,
 }
 
-impl<'ctx, 'state, State: RegisterMap + 'state, Backend: Compiler> CompiledTranslationUnit<'ctx, 'state, State, Backend> {
+impl<'ctx, 'state, State: RegisterMap + 'state, Backend: Compiler>
+    CompiledTranslationUnit<'ctx, 'state, State, Backend>
+{
     pub unsafe fn execute(&mut self, state: &mut State) {
         if let Some(exec) = self.executable.upgrade() {
             unsafe {
